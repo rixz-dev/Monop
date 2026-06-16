@@ -12,6 +12,9 @@ export interface TileData {
   mortgage?: number;
   amount?: number;
   percent?: number;
+  owner?: number | null;
+  houses?: number;
+  mortgaged?: boolean;
 }
 
 export const TILES: TileData[] = [
