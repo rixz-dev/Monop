@@ -118,7 +118,6 @@ export function useGame(cfg: Settings) {
   }, []);
 
   // ===== CORE GAME LOGIC =====
-  // These are wrapped in a ref to avoid stale closures in recursive calls
   const logicRef = useRef<any>({});
 
   useEffect(() => {
@@ -128,7 +127,7 @@ export function useGame(cfg: Settings) {
     };
 
     const canBuildEven = (id: number, tiles: TileData[]) => {
-      const t = tiles[id]; if (!t.group) return false;
+      const t = tiles[id]; if (!t || !t.group) return false;
       const groupTiles = tiles.filter(x => x.group === t.group);
       const min = Math.min(...groupTiles.map(x => x.owner === t.owner ? (x.houses || 0) : 99));
       const h = t.houses || 0;
@@ -150,13 +149,13 @@ export function useGame(cfg: Settings) {
       return s;
     };
 
-    const closeM = (s: GameState) => ({ ...s, modal: { ...s.modal, open: false } });
+    const closeM = (s: GameState) => ({ ...s, modal: { ...s.modal, open: false }, waiting: false });
 
     const openM = (s: GameState, title: string, body: React.ReactNode, actions: ModalAction[]) => ({
       ...s, modal: { open: true, title, body, actions }, waiting: true,
     });
 
-    const bankrupt = (s: GameState, pid: number, creditorId: number | null): GameState => {
+    const bankruptFn = (s: GameState, pid: number, creditorId: number | null): GameState => {
       const p = s.players[pid];
       addLog(`${p.name} dinyatakan BANKRUPT!`, 'bad');
       const tiles = s.tiles.map(t => t.owner === pid ? { ...t, owner: null, houses: 0, mortgaged: false } as TileData : t);
@@ -184,11 +183,11 @@ export function useGame(cfg: Settings) {
       let rent = 0;
       if (tile.type === 'street') {
         const hasMono = isMono(tile.group || 0, ownerId, s.tiles);
-        rent = tile.rent?.[tile.houses || 0] || 0;
+        rent = (tile.rent || [])[tile.houses || 0] || 0;
         if ((tile.houses || 0) === 0 && hasMono) rent *= 2;
       } else if (tile.type === 'railroad') {
         const count = owner.properties.filter(id => s.tiles[id].type === 'railroad').length;
-        rent = tile.rent?.[Math.min(count, 4) - 1] || 25;
+        rent = (tile.rent || [])[Math.min(count, 4) - 1] || 25;
       } else if (tile.type === 'utility') {
         const count = owner.properties.filter(id => s.tiles[id].type === 'utility').length;
         const mult = count === 2 ? 10 : 4;
@@ -202,23 +201,32 @@ export function useGame(cfg: Settings) {
         return pl;
       });
       let ns = { ...s, players };
-      if (ns.players[pid].money < 0) ns = bankrupt(ns, pid, ownerId);
+      if (ns.players[pid].money < 0) ns = bankruptFn(ns, pid, ownerId);
       return ns;
     };
 
     const buyProp = (s: GameState, pid: number, tid: number): GameState => {
       const tile = s.tiles[tid]; const p = s.players[pid];
-      if (!tile || tile.owner != null || !tile.price || p.money < tile.price) return s;
-      addLog(`${p.name} membeli ${tile.name} seharga $${tile.price}`, 'money');
+      if (!tile) return s;
+      if (tile.owner != null) return s;
+      const price = tile.price;
+      if (price == null) return s;
+      if (p.money < price) return s;
+      addLog(`${p.name} membeli ${tile.name} seharga $${price}`, 'money');
       const tiles = s.tiles.map(t => t.id === tid ? { ...t, owner: pid } as TileData : t);
-      const players = s.players.map(pl => pl.id === pid ? { ...pl, money: pl.money - tile.price, properties: [...pl.properties, tid] } : pl);
+      const players = s.players.map(pl => pl.id === pid ? { ...pl, money: pl.money - price, properties: [...pl.properties, tid] } : pl);
       return { ...s, tiles, players };
     };
 
     const build = (s: GameState, pid: number, tid: number): GameState => {
       const t = s.tiles[tid]; const p = s.players[pid];
-      if (!t || t.owner !== pid || t.mortgaged || !t.houseCost || !t.group) return s;
-      if (p.money < t.houseCost) return s;
+      if (!t) return s;
+      if (t.owner !== pid) return s;
+      if (t.mortgaged) return s;
+      const houseCost = t.houseCost;
+      if (houseCost == null) return s;
+      if (!t.group) return s;
+      if (p.money < houseCost) return s;
       const needed = GROUPS[t.group] || 0;
       const have = p.properties.filter(id => s.tiles[id].group === t.group && !s.tiles[id].mortgaged).length;
       if (have !== needed) return s;
@@ -227,17 +235,22 @@ export function useGame(cfg: Settings) {
       const nextH = (t.houses || 0) + 1;
       const isHotel = nextH === 5;
       const tiles = s.tiles.map(tile => tile.id === tid ? { ...tile, houses: nextH } as TileData : tile);
-      const players = s.players.map(pl => pl.id === pid ? { ...pl, money: pl.money - t.houseCost } : pl);
+      const players = s.players.map(pl => pl.id === pid ? { ...pl, money: pl.money - houseCost } : pl);
       addLog(`${p.name} membangun ${isHotel ? 'HOTEL' : 'rumah'} di ${t.name}`, 'money');
       return { ...s, tiles, players };
     };
 
     const mortg = (s: GameState, pid: number, tid: number): GameState => {
       const t = s.tiles[tid]; const p = s.players[pid];
-      if (!t || t.owner !== pid || t.mortgaged || (t.houses || 0) > 0 || !t.mortgage) return s;
+      if (!t) return s;
+      if (t.owner !== pid) return s;
+      if (t.mortgaged) return s;
+      if ((t.houses || 0) > 0) return s;
+      const mortgageVal = t.mortgage;
+      if (mortgageVal == null) return s;
       const tiles = s.tiles.map(tile => tile.id === tid ? { ...tile, mortgaged: true } as TileData : tile);
-      const players = s.players.map(pl => pl.id === pid ? { ...pl, money: pl.money + t.mortgage } : pl);
-      addLog(`${p.name} menggadaikan ${t.name} +$${t.mortgage}`, 'money');
+      const players = s.players.map(pl => pl.id === pid ? { ...pl, money: pl.money + mortgageVal } : pl);
+      addLog(`${p.name} menggadaikan ${t.name} +$${mortgageVal}`, 'money');
       return { ...s, tiles, players };
     };
 
@@ -309,7 +322,7 @@ export function useGame(cfg: Settings) {
       const card = cards[0];
       const newDeck = [...cards.slice(1), card];
       addLog(`${isChance ? 'Chance' : 'Community Chest'}: ${card.text}`, 'actor');
-      let ns: GameState = { ...s, [isChance ? 'chanceDeck' : 'communityDeck']: newDeck } as GameState;
+      let ns: GameState = { ...s, [isChance ? 'chanceDeck' : 'communityDeck']: newDeck } as unknown as GameState;
       const p = ns.players[pid];
       if (card.getOut) {
         const players = ns.players.map(pl => pl.id === pid ? { ...pl, getOutCards: pl.getOutCards + 1 } : pl);
@@ -347,16 +360,17 @@ export function useGame(cfg: Settings) {
           return { ...ns, players };
         }
         if (card.to != null) {
-          const passed = card.to < p.pos && card.to !== 10;
+          const toPos: number = card.to;
+          const passed = toPos < p.pos && toPos !== 10;
           let money = 0;
           if (passed && card.collect !== false) { money = 200; addLog('Lewat GO +$200', 'money'); }
-          const players = ns.players.map(pl => pl.id === pid ? { ...pl, pos: card.to, money: pl.money + money } : pl);
+          const players = ns.players.map(pl => pl.id === pid ? { ...pl, pos: toPos, money: pl.money + money } : pl);
           ns = { ...ns, players };
-          return landOnTile(ns, pid, card.to, canRollAgain);
+          return landOnTile(ns, pid, toPos, canRollAgain);
         }
         if (card.nearest) {
           const targets = card.nearest === 'railroad' ? RAILROADS : UTILITIES;
-          let nearest = targets[0];
+          let nearest: number = targets[0] ?? 0;
           for (const t of targets) { if (t > p.pos) { nearest = t; break; } }
           let money = 0;
           if (nearest <= p.pos) { money = 200; addLog('Lewat GO +$200', 'money'); }
@@ -364,11 +378,11 @@ export function useGame(cfg: Settings) {
           ns = { ...ns, players };
           return landOnTile(ns, pid, nearest, canRollAgain);
         }
-        if (card.by) {
-          const pos = (p.pos + card.by + 40) % 40;
-          const players = ns.players.map(pl => pl.id === pid ? { ...pl, pos } : pl);
+        if (card.by != null) {
+          const byPos: number = (p.pos + card.by + 40) % 40;
+          const players = ns.players.map(pl => pl.id === pid ? { ...pl, pos: byPos } : pl);
           ns = { ...ns, players };
-          return landOnTile(ns, pid, pos, canRollAgain);
+          return landOnTile(ns, pid, byPos, canRollAgain);
         }
       }
       return ns;
@@ -397,7 +411,7 @@ export function useGame(cfg: Settings) {
       else if (diff === 'medium') want = shouldBuyMedium(p, tile);
       else want = shouldBuyEasy();
       if (want && p.money >= tile.price) return buyProp(s, pid, tid);
-      if (cfgRef.current.auction !== 'off') return s; // auction not auto for simplicity
+      if (cfgRef.current.auction !== 'off') return s;
       return s;
     };
 
@@ -433,7 +447,7 @@ export function useGame(cfg: Settings) {
     };
 
     logicRef.current = {
-      isMono, canBuildEven, netW, addFree, closeM, openM, bankrupt, advance,
+      isMono, canBuildEven, netW, addFree, closeM, openM, bankruptFn, advance,
       payRent, buyProp, build, mortg, unmortg, execTrade, landOnTile, drawCard,
       movePlayer, botDecideBuy, rollDice,
     };

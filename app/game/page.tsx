@@ -30,7 +30,7 @@ export default function GamePage() {
   const isHumanTurn = !p.isBot && !p.bankrupt && !state.gameOver && !state.paused && !state.waiting && !state.animating;
   const tile = state.tiles[p.pos];
 
-  const humanActions = () => {
+  const humanActions = (): { label: string; fn: () => void; style: 'primary' | 'secondary' | 'danger' }[] => {
     if (!isHumanTurn) return [];
     if (p.jailed > 0) {
       const acts: { label: string; fn: () => void; style: 'primary' | 'secondary' | 'danger' }[] = [
@@ -49,7 +49,7 @@ export default function GamePage() {
     return [{ label: t(cfg.lang, 'roll'), fn: doRollDice, style: 'primary' }];
   };
 
-  const postActions = () => {
+  const postActions = (): { label: string; fn: () => void; style: 'primary' | 'secondary' | 'danger' }[] => {
     if (!isHumanTurn) return [];
     const acts: { label: string; fn: () => void; style: 'primary' | 'secondary' | 'danger' }[] = [];
     const canBuild = p.properties.some(id => {
@@ -93,7 +93,7 @@ export default function GamePage() {
         })}
       </div>
     );
-    openModal(t(cfg.lang, 'build'), body, [{ label: t(cfg.lang, 'cancel'), style: 'secondary', fn: closeModal }]);
+    openModal(t(cfg.lang, 'build'), body, [{ label: t(cfg.lang, 'cancel'), style: 'secondary' as const, fn: closeModal }]);
   };
 
   const openMortModal = () => {
@@ -117,7 +117,7 @@ export default function GamePage() {
         })}
       </div>
     );
-    openModal(t(cfg.lang, 'mortgage'), body, [{ label: t(cfg.lang, 'cancel'), style: 'secondary', fn: closeModal }]);
+    openModal(t(cfg.lang, 'mortgage'), body, [{ label: t(cfg.lang, 'cancel'), style: 'secondary' as const, fn: closeModal }]);
   };
 
   const openUnmortModal = () => {
@@ -139,7 +139,7 @@ export default function GamePage() {
         })}
       </div>
     );
-    openModal(t(cfg.lang, 'unmortgage'), body, [{ label: t(cfg.lang, 'cancel'), style: 'secondary', fn: closeModal }]);
+    openModal(t(cfg.lang, 'unmortgage'), body, [{ label: t(cfg.lang, 'cancel'), style: 'secondary' as const, fn: closeModal }]);
   };
 
   useEffect(() => {
@@ -152,14 +152,14 @@ export default function GamePage() {
           {winner ? winner.name : '???'} {t(cfg.lang, 'winner')}
         </div>,
         [
-          { label: t(cfg.lang, 'playAgain'), fn: () => { resetGame(); closeModal(); }, style: 'primary' },
-          { label: t(cfg.lang, 'quit'), fn: () => router.push('/'), style: 'danger' },
+          { label: t(cfg.lang, 'playAgain'), fn: () => { resetGame(); closeModal(); }, style: 'primary' as const },
+          { label: t(cfg.lang, 'quit'), fn: () => router.push('/'), style: 'danger' as const },
         ]
       );
     }
   }, [state.gameOver]);
 
-  const currentActions = isHumanTurn ? (humanActions().length > 0 ? humanActions() : postActions()) : [];
+  const currentActions: { label: string; fn: () => void; style: 'primary' | 'secondary' | 'danger' }[] = isHumanTurn ? (humanActions().length > 0 ? humanActions() : postActions()) : [];
 
   return (
     <div className="game-wrap">
@@ -191,8 +191,8 @@ export default function GamePage() {
           title={t(cfg.lang, 'paused')}
           body={<div>Permainan dijeda.</div>}
           actions={[
-            { label: t(cfg.lang, 'resume'), fn: () => { togglePause(); closeModal(); }, style: 'primary' },
-            { label: t(cfg.lang, 'quit'), fn: () => router.push('/'), style: 'danger' },
+            { label: t(cfg.lang, 'resume'), fn: () => { togglePause(); closeModal(); }, style: 'primary' as const },
+            { label: t(cfg.lang, 'quit'), fn: () => router.push('/'), style: 'danger' as const },
           ]}
           onClose={togglePause}
         />

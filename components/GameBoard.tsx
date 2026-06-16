@@ -1,6 +1,7 @@
 'use client';
 import { useRef, useEffect } from 'react';
-import { GameState, PLAYER_COLORS, TileData } from '@/lib/data';
+import { GameState } from '@/hooks/useGame';
+import { PLAYER_COLORS, TileData } from '@/lib/data';
 
 const ORDER = [
   20,21,22,23,24,25,26,27,28,29,30,
@@ -40,9 +41,9 @@ export function GameBoard({ state }: { state: GameState }) {
   useEffect(() => {
     if (!boardRef.current) return;
     const r = boardRef.current.getBoundingClientRect();
-    state.players.forEach((p, i) => {
+    state.players.forEach((pl, i) => {
       const el = document.getElementById(`token-${i}`);
-      const tileEl = boardRef.current?.querySelector<HTMLElement>(`.tile[data-id="${p.pos}"]`);
+      const tileEl = boardRef.current?.querySelector<HTMLElement>(`.tile[data-id="${pl.pos}"]`);
       if (!el || !tileEl) return;
       const tr = tileEl.getBoundingClientRect();
       const offset = (i * 4) % 12;
@@ -93,7 +94,7 @@ export function GameBoard({ state }: { state: GameState }) {
           </div>
         );
       })}
-      {state.players.map((p, i) => (
+      {state.players.map((pl, i) => (
         <div key={i} id={`token-${i}`} className={`token p${i}`} />
       ))}
     </div>

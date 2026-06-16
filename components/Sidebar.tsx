@@ -1,5 +1,6 @@
 'use client';
-import { GameState, PLAYER_COLORS, Settings, TileData } from '@/lib/data';
+import { GameState } from '@/hooks/useGame';
+import { Settings, PLAYER_COLORS } from '@/lib/data';
 import { t } from '@/lib/i18n';
 
 export function Sidebar({ state, cfg }: { state: GameState; cfg: Settings }) {
