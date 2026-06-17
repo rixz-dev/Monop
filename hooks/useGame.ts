@@ -5,7 +5,7 @@ import {
   CHANCE_CARDS, COMMUNITY_CHEST_CARDS, shuffle, PLAYER_COLORS, BOT_NAMES,
 } from '@/lib/data';
 import {
-  shouldBuyHard, shouldBuyMedium, shouldBuyEasy, botAuctionBid, shouldPayJail, botAcceptTrade,
+  shouldBuyHard, shouldBuyMedium, shouldBuyEasy,
 } from '@/lib/ai';
 
 export interface Player {
@@ -53,6 +53,7 @@ export interface GameState {
   };
   log: LogEntry[];
   animating: boolean;
+  justMoved: boolean; // true after a bot/human finishes moving, to trigger next turn
 }
 
 function timeNow() {
@@ -91,6 +92,7 @@ export function initGameState(cfg: Settings): GameState {
     modal: { open: false, title: '', body: null, actions: [] },
     log: [{ time: timeNow(), msg: 'Game dimulai. ' + (2 + (cfg.diff === 'hard' ? 1 : 0) + 1) + ' pemain.', type: 'actor' }],
     animating: false,
+    justMoved: false,
   };
 }
 
@@ -98,10 +100,6 @@ export function useGame(cfg: Settings) {
   const [state, setState] = useState<GameState>(() => initGameState(cfg));
   const cfgRef = useRef(cfg);
   useEffect(() => { cfgRef.current = cfg; }, [cfg]);
-
-  const updateState = useCallback((fn: (prev: GameState) => GameState) => {
-    setState(prev => fn(prev));
-  }, []);
 
   const addLog = useCallback((msg: string, type: LogEntry['type'] = 'info') => {
     setState(prev => ({
@@ -149,12 +147,6 @@ export function useGame(cfg: Settings) {
       return s;
     };
 
-    const closeM = (s: GameState) => ({ ...s, modal: { ...s.modal, open: false }, waiting: false });
-
-    const openM = (s: GameState, title: string, body: React.ReactNode, actions: ModalAction[]) => ({
-      ...s, modal: { open: true, title, body, actions }, waiting: true,
-    });
-
     const bankruptFn = (s: GameState, pid: number, creditorId: number | null): GameState => {
       const p = s.players[pid];
       addLog(`${p.name} dinyatakan BANKRUPT!`, 'bad');
@@ -174,7 +166,7 @@ export function useGame(cfg: Settings) {
     const advance = (s: GameState): GameState => {
       let next = (s.turn + 1) % s.players.length;
       while (s.players[next].bankrupt) next = (next + 1) % s.players.length;
-      return { ...s, turn: next, round: next === 0 ? s.round + 1 : s.round, doublesCount: 0 };
+      return { ...s, turn: next, round: next === 0 ? s.round + 1 : s.round, doublesCount: 0, justMoved: false };
     };
 
     const payRent = (s: GameState, pid: number, ownerId: number, tid: number): GameState => {
@@ -415,6 +407,41 @@ export function useGame(cfg: Settings) {
       return s;
     };
 
+    const botPostTurn = (s: GameState, pid: number): GameState => {
+      const p = s.players[pid]; if (p.bankrupt) return s;
+      let ns = s;
+      const diff = cfgRef.current.diff;
+      // build
+      const groups: Record<number, number[]> = {};
+      p.properties.forEach(id => {
+        const t = ns.tiles[id];
+        if (!t.mortgaged && t.group != null) { (groups[t.group] = groups[t.group] || []).push(id); }
+      });
+      Object.entries(groups).forEach(([g, ids]) => {
+        if (ids.length === (GROUPS[parseInt(g)] || 0)) {
+          const sorted = ids.sort((a, b) => (ns.tiles[a].houses || 0) - (ns.tiles[b].houses || 0));
+          for (const id of sorted) {
+            const t = ns.tiles[id];
+            const reserve = diff === 'hard' ? 100 : 150;
+            if (ns.players[pid].money > (t.houseCost || 0) + reserve && (t.houses || 0) < 5 && canBuildEven(id, ns.tiles)) {
+              if (diff === 'hard' || (diff === 'medium' && Math.random() < 0.7)) {
+                ns = build(ns, pid, id);
+              } else if (diff === 'easy' && Math.random() < 0.25) {
+                ns = build(ns, pid, id);
+              }
+            }
+          }
+        }
+      });
+      // mortgage if low cash
+      if (ns.players[pid].money < 150) {
+        const cand = p.properties.filter(id => !ns.tiles[id].mortgaged && (ns.tiles[id].houses || 0) === 0 && ns.tiles[id].mortgage != null)
+          .sort((a, b) => (ns.tiles[b].mortgage || 0) - (ns.tiles[a].mortgage || 0));
+        if (cand.length) ns = mortg(ns, pid, cand[0]);
+      }
+      return ns;
+    };
+
     const rollDice = (s: GameState, pid: number): [GameState, [number, number]] => {
       const d1 = 1 + Math.floor(Math.random() * 6);
       const d2 = 1 + Math.floor(Math.random() * 6);
@@ -435,21 +462,23 @@ export function useGame(cfg: Settings) {
         }
         addLog('Gagal keluar penjara.', 'bad');
         const players = s.players.map(pl => pl.id === pid ? { ...pl, jailed } : pl);
-        return [{ ...s, players }, [d1, d2]];
+        return [{ ...s, players, justMoved: true }, [d1, d2]];
       }
       let doublesCount = isDouble ? s.doublesCount + 1 : 0;
       if (doublesCount >= 3) {
         addLog('3x kembar! Langsung ke penjara.', 'bad');
         const players = s.players.map(pl => pl.id === pid ? { ...pl, pos: 10, jailed: 1 } : pl);
-        return [{ ...s, players, doublesCount: 0 }, [d1, d2]];
+        return [{ ...s, players, doublesCount: 0, justMoved: true }, [d1, d2]];
       }
-      return [movePlayer({ ...s, doublesCount }, pid, d1 + d2, isDouble && doublesCount < 3), [d1, d2]];
+      const canRollAgain = isDouble && doublesCount < 3;
+      const ns = movePlayer({ ...s, doublesCount }, pid, d1 + d2, canRollAgain);
+      return [{ ...ns, justMoved: !canRollAgain }, [d1, d2]];
     };
 
     logicRef.current = {
-      isMono, canBuildEven, netW, addFree, closeM, openM, bankruptFn, advance,
+      isMono, canBuildEven, netW, addFree, bankruptFn, advance,
       payRent, buyProp, build, mortg, unmortg, execTrade, landOnTile, drawCard,
-      movePlayer, botDecideBuy, rollDice,
+      movePlayer, botDecideBuy, botPostTurn, rollDice,
     };
   }, [addLog]);
 
@@ -539,22 +568,48 @@ export function useGame(cfg: Settings) {
     setState(prev => ({ ...prev, paused: !prev.paused }));
   }, []);
 
-  // Bot turn automation
+  // Auto advance after animating finishes (bot or human)
   useEffect(() => {
     if (state.gameOver || state.paused || state.waiting || state.animating) return;
+    const p = state.players[state.turn];
+    if (!p) return;
+
+    // If current player just finished moving and it's a bot, do post-turn then advance
+    if (state.justMoved && p.isBot) {
+      const timer = setTimeout(() => {
+        setState(prev => {
+          const { botPostTurn, advance } = logicRef.current;
+          if (!botPostTurn || !advance) return prev;
+          let ns = botPostTurn(prev, prev.turn);
+          ns = { ...ns, justMoved: false };
+          return advance(ns);
+        });
+      }, speedMs(400));
+      return () => clearTimeout(timer);
+    }
+
+    // If current player just finished moving and it's human, mark justMoved false so they can take post-turn actions
+    if (state.justMoved && !p.isBot) {
+      setState(prev => ({ ...prev, justMoved: false }));
+    }
+  }, [state.turn, state.justMoved, state.animating, state.gameOver, state.paused, state.waiting, speedMs]);
+
+  // Bot turn automation: roll dice when it's bot's turn and nothing happening
+  useEffect(() => {
+    if (state.gameOver || state.paused || state.waiting || state.animating || state.justMoved) return;
     const p = state.players[state.turn];
     if (!p || !p.isBot || p.bankrupt) return;
     const timer = setTimeout(() => {
       const { rollDice } = logicRef.current;
       if (!rollDice) return;
       setState(prev => {
-        if (prev.gameOver || prev.paused || prev.waiting) return prev;
+        if (prev.gameOver || prev.paused || prev.waiting || prev.animating || prev.justMoved) return prev;
         const [ns, dice] = rollDice(prev, prev.turn);
-        return { ...ns, dice };
+        return { ...ns, dice, animating: true };
       });
-    }, speedMs(600));
+    }, speedMs(800));
     return () => clearTimeout(timer);
-  }, [state.turn, state.gameOver, state.paused, state.waiting, state.animating, speedMs]);
+  }, [state.turn, state.gameOver, state.paused, state.waiting, state.animating, state.justMoved, speedMs]);
 
   return {
     state, setState,

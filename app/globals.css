@@ -127,7 +127,7 @@ html, body { height: 100%; font-family: var(--ui); background: var(--bg); color:
 
 .hidden { display: none !important; }
 
-/* Game */
+/* ==================== GAME BOARD ==================== */
 .game-wrap { display: grid; grid-template-columns: 260px 1fr 260px; gap: 18px; padding: 18px 22px; width: 100vw; height: 100vh; position: relative; z-index: 5; }
 .sidebar { display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
 .panel { background: var(--panel); border: 2px solid var(--border); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow); }
@@ -159,25 +159,69 @@ html, body { height: 100%; font-family: var(--ui); background: var(--bg); color:
 .hud-center { display: flex; gap: 8px; }
 .hud-btn { background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
 
-.monopoly-board { display: grid; grid-template-columns: repeat(11, 1fr); grid-template-rows: repeat(11, 1fr); gap: 3px; width: min(78vh, 72vw); height: min(78vh, 72vw); background: var(--border); border: 3px solid var(--border); border-radius: 10px; overflow: hidden; position: relative; }
-.tile { background: var(--card); position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: clamp(8px, 1.1vw, 12px); text-align: center; line-height: 1.1; transition: background 0.2s, transform 0.2s; }
-.tile:hover { transform: scale(1.04); z-index: 2; }
-.tile.corner { background: var(--panel); font-family: var(--pixel); font-size: 9px; }
-.tile .bar { position: absolute; top: 0; left: 0; right: 0; height: 22%; }
-.tile .price { position: absolute; bottom: 3px; font-size: 8px; font-family: var(--pixel); color: var(--muted); }
-.tile .tile-name { padding: 2px 4px; font-weight: 600; }
-.tile .owners { position: absolute; bottom: 12px; display: flex; gap: 2px; }
-.tile .owners .o { width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); }
-.tile .houses { position: absolute; bottom: 22px; display: flex; gap: 1px; }
-.tile .houses .h { width: 5px; height: 5px; border-radius: 1px; background: var(--success); border: 1px solid rgba(255,255,255,0.3); }
-.tile .houses .h.hotel { background: var(--danger); width: 8px; height: 6px; border-radius: 2px; }
+/* ===== MONOPOLY BOARD ===== */
+.monopoly-board {
+  display: grid;
+  grid-template-columns: 2.5fr repeat(9, 1.5fr) 2.5fr;
+  grid-template-rows: 2.5fr repeat(9, 1.5fr) 2.5fr;
+  gap: 2px;
+  width: min(82vh, 76vw); height: min(82vh, 76vw);
+  background: var(--border); border: 3px solid var(--border); border-radius: 12px; overflow: hidden;
+  position: relative; box-shadow: var(--shadow);
+}
 
+.tile {
+  background: var(--card);
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: clamp(6px, 0.85vw, 10px); text-align: center; line-height: 1.1;
+  transition: transform 0.15s, background 0.2s;
+  border: 1px solid var(--border);
+}
+.tile:hover { transform: scale(1.04); z-index: 2; background: var(--panel); }
+
+/* Center */
+.tile-center { background: var(--panel); border: none; }
+
+/* Corner tiles */
+.tile-corner {
+  background: var(--panel); border: 1px solid var(--border); font-family: var(--pixel); font-size: 9px;
+  display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4px;
+}
+.corner-go { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.corner-jail, .corner-parking, .corner-gotojail { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+/* Street tiles */
+.tile-street {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: 2px 0; gap: 1px;
+}
+.tile-street-bar { position: absolute; top: 0; left: 0; right: 0; height: 18%; border-radius: 0 0 2px 2px; }
+.tile-street-name { font-size: clamp(6px, 0.85vw, 9px); font-weight: 700; margin-top: 18%; padding: 0 2px; line-height: 1.05; }
+.tile-street-price { font-size: clamp(5px, 0.75vw, 8px); font-family: var(--pixel); color: var(--muted); margin-top: auto; padding-bottom: 2px; }
+
+/* Special tiles (chance, community, tax, railroad, utility) */
+.tile-special {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+}
+.tile-special-name { font-size: clamp(5px, 0.75vw, 8px); font-weight: 600; line-height: 1.1; padding: 0 2px; }
+.tile-special-price { font-size: clamp(5px, 0.7vw, 7px); font-family: var(--pixel); color: var(--muted); }
+
+/* Owners, houses, hotels on tile */
+.tile-owners { position: absolute; bottom: 3px; display: flex; gap: 2px; z-index: 3; }
+.tile-owner-dot { width: 7px; height: 7px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); box-shadow: 0 0 4px rgba(0,0,0,0.5); }
+.tile-houses { position: absolute; bottom: 12px; display: flex; gap: 1px; z-index: 3; }
+.tile-house { width: 5px; height: 5px; border-radius: 1px; background: var(--success); border: 1px solid rgba(255,255,255,0.3); }
+.tile-hotel { width: 9px; height: 6px; border-radius: 2px; background: var(--danger); border: 1px solid rgba(255,255,255,0.3); }
+
+/* Tokens */
 .token { position: absolute; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 6px rgba(0,0,0,0.5); transition: top 0.4s ease, left 0.4s ease; z-index: 10; pointer-events: none; }
 .token.p0 { background: #f0c040; }
 .token.p1 { background: #40d0c0; }
 .token.p2 { background: #e85555; }
 .token.p3 { background: #7b7bff; }
 
+/* Action bar */
 .action-bar { display: flex; align-items: center; gap: 14px; width: 100%; justify-content: center; }
 .dice-box { display: flex; gap: 10px; align-items: center; }
 .die { width: 44px; height: 44px; background: var(--card); border: 2px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--text); box-shadow: var(--shadow); transition: transform 0.1s; }
@@ -186,14 +230,16 @@ html, body { height: 100%; font-family: var(--ui); background: var(--bg); color:
 .action-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .action-btns .btn { padding: 10px 14px; font-size: 11px; }
 
+/* Modal */
 .modal-body { font-size: 13px; color: var(--text); line-height: 1.5; }
 .card-preview { display: flex; align-items: center; gap: 12px; margin: 8px 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
-.card-bar { width: 12px; height: 60px; border-radius: 4px; }
+.card-bar { width: 12px; height: 40px; border-radius: 3px; }
 .bid-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
 .bid-val { font-family: var(--pixel); font-size: 12px; color: var(--accent1); min-width: 70px; text-align: right; }
 .trade-grid { display: grid; grid-template-columns: 1fr 40px 1fr; gap: 8px; align-items: start; }
 .trade-list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
 .trade-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; background: var(--card); font-size: 12px; }
+.trade-item:hover { border-color: var(--accent2); }
 .trade-item.selected { border-color: var(--accent1); background: var(--accent1-dim); }
 .trade-mid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 18px; }
 .trade-mid input { width: 80px; text-align: center; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px; font-size: 12px; }
